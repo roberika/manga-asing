@@ -39,7 +39,7 @@ capabilities = {
 }
 
 # Untuk scrape situs yang bisa dihandali oleh request biasa
-async def search(site, title):
+async def request(site, title):
     # "https://www.wuxiaworld.com/q=122221"
     link = site[0] + title.replace(" ", "+")
 
@@ -81,13 +81,14 @@ async def mangadex(title):
     for manga in r.json()["data"]:
         results.append(f"https://mangadex.org/title/{manga['id']}")
 
-async def main():
+async def search(title):
     await asyncio.gather(
-        mangadex("a manga"), 
-        playwright(sites[1], "a")
+        mangadex(title), 
+        playwright(sites[1], title)
     )
     for result in results:
         print(result)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    title = input("Search for: ")
+    asyncio.run(search(title))
