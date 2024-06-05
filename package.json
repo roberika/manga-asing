@@ -1,0 +1,14 @@
+{
+  "name": "manga-asing",
+  "version": "1.0.0",
+  "description": "A university project about paralel computation. It scrapes search results asynchronously from various sites, either through plain HTML and requests, Playwright puppeteering, or through their official APIs, then display the results.",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.44.1",
+    "@types/node": "^20.14.1"
+  }
+}
