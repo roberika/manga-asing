@@ -12,15 +12,22 @@ import subprocess
 import sys
 import time
 import urllib
+from urllib.parse import unquote, urlparse
+from pathlib import PurePosixPath
 from playwright.async_api import async_playwright
 
-# header, bagian search, bagian manga, batasan segment, tipe
+# header, bagian search, bagian manga, batasan segment, title, filter out
 # 0 = spesial, 1 = request, 2 = playwright
 sites = [
-    ["https://mangadex.org", "/search?q=", "/title/", 0],
-    ["https://asuratoon.com", "/?s=", "/manga/", 0],
-    ["https://mangapill.com", "/search?q=", "/manga/", 1],
-    ["https://mangapark.net", "/search?word=", "/title/", 1]
+    ["https://mangadex.org", "/search?q=", "/title/", None, False, None],
+    ["https://asuratoon.com", "/?s=", "https://asuratoon.com/manga/", None, False, {"class" : "series"}],
+    ["https://mangapill.com", "/search?q=", "/manga/", None, False, None],
+    ["https://mangapark.net", "/search?word=", "/title/", None, False, None],
+    ["https://flamecomics.me", "/?s=", "https://flamecomics.me/series/", 3, True, None],
+    ["https://mangareader.to", "/search?keyword=", r'/.*-[0-9]+$', 2, True, None],
+    ["https://mangafire.to", "/filter?keyword=", '/manga/', None, False, None],
+    ["https://ww1.mangafreak.me", "/Find/", '/Manga/', None, False, None],
+
 ]
 
 results = []
@@ -47,39 +54,44 @@ async def request(site, title):
 
     raw_response = requests.get(link)
     raw_response.encoding = 'utf-8'
-    a_hrefs = get_a_hrefs(raw_response.text, site[2])
+    soup = BeautifulSoup(raw_response.text, 'html.parser')
+    a_hrefs = soup.find_all("a", attrs=({"href": re.compile("^"+site[2])}))
+
+    for a in a_hrefs:
+        print(a.prettify())
+    print(soup.prettify())
+    # Filter elemen yang punya title (flamescomic, mangareader)
+    if(site[4]):
+        a_hrefs = [a_href for a_href in a_hrefs if a_href.has_attr('title')]
+
+    # Filter elemen yang bukan manga
+    if(site[5] != None):
+        a_hrefs = [a_href for a_href in a_hrefs if a_href.find(attrs=site[5]) == None]
+    a_hrefs = [a_href["href"] for a_href in a_hrefs]
+
+    # Filter link ke halaman bab
+    if(site[3] != None): 
+        a_hrefs = ["/" + "/".join(PurePosixPath(unquote(urlparse(a_href).path)).parts[1:site[3]]) for a_href in a_hrefs]
+    a_hrefs = list(set(a_hrefs))[0:limit]
 
     for a_href in a_hrefs:
       results.append(site[0] + a_href)
+    
+    print(site[0])
 
-# Untuk scrape situs yang tidak bisa dihandali oleh request biasa (SPA, JS-heavy, dst)
-async def playwright(site, title):
+# Comick memakai JS untuk meload data, sehingga perlu diolah terpisah dengan playwright
+async def comick(title):
     async with async_playwright() as playwright:
         playwright_version = str(subprocess.getoutput("playwright --version")).strip().split(" ")[1]
         capabilities["LT:Options"]["playwrightClientVersion"] = playwright_version
         browser = await playwright.chromium.launch(headless=True)
         page = await browser.new_page()
-        await page.goto(site[0] + site[1] + title_url(title))
-
-        outerHTML = await page.evaluate("el => el.outerHTML")
-        a_hrefs = get_a_hrefs("".join(outerHTML), site[2])
+        await page.goto("https://comick.io/search?q=" + title_url(title))
         
-        for a_href in a_hrefs:
-            results.append(site[0] + a_href)
-        await browser.close()
-
-# Asura pakai playwright
-async def asuratoon(title):
-    async with async_playwright() as playwright:
-        playwright_version = str(subprocess.getoutput("playwright --version")).strip().split(" ")[1]
-        capabilities["LT:Options"]["playwrightClientVersion"] = playwright_version
-        browser = await playwright.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto("https://asuratoon.com/?s=" + title_url(title))
-        
-        locator = page.locator(".listupd")
-        outerHTML = await locator.evaluate("el => el.outerHTML")
-        a_hrefs = get_a_hrefs("".join(outerHTML), "^https://asuratoon.com/manga/")
+        loaded = page.locator("id=__next")
+        outerHTML = await loaded.evaluate("el => el.outerHTML")
+        soup = BeautifulSoup("".join(outerHTML), 'html.parser')
+        a_hrefs = soup.find_all("a", attrs=({"href": re.compile("^/comic/")}))
         
         for a_href in a_hrefs:
             results.append(a_href)
@@ -94,23 +106,23 @@ async def mangadex(title):
     for manga in r.json()["data"][0:limit]:
         results.append(f"https://mangadex.org/title/{manga['id']}")
 
+    print("https://mangadex.org")
+
 def title_url(title):
     return urllib.parse.quote_plus(title)
-
-def get_a_hrefs(outerHTML, header):
-    soup = BeautifulSoup(outerHTML, 'html.parser')
-    a_hrefs = soup.find_all("a", attrs={"href": re.compile("^"+header)})
-    a_hrefs = sorted(list(set([a_href["href"] for a_href in a_hrefs])))
-    return a_hrefs[0:limit]
 
 limit = 999
 
 async def search(title):
     await asyncio.gather(
-        mangadex(title), 
-        asuratoon(title),
-        request(sites[2], title),
-        request(sites[3], title)
+        # mangadex(title), 
+        # request(sites[1], title),
+        # request(sites[2], title),
+        # request(sites[3], title),
+        # request(sites[4], title),
+        # request(sites[5], title),
+        # request(sites[6], title),
+        # request(sites[7], title),
     )
     for result in results:
         print(result)
