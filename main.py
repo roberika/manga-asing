@@ -1,3 +1,4 @@
+from typing import Any, Awaitable, Callable
 from bs4 import BeautifulSoup
 import requests
 import asyncio
@@ -7,12 +8,15 @@ import time
 import re
 import json
 import logging
+import webbrowser
 import os
 import subprocess
 import sys
 import time
 import urllib
+from tkinter import *
 from urllib.parse import unquote, urlparse
+from urllib.request import urlopen
 from pathlib import PurePosixPath
 from playwright.async_api import async_playwright
 
@@ -171,21 +175,134 @@ def parse_manga(title, url, image):
 
 limit = 5
 
-async def search(title):
-    results = await asyncio.gather(
-        mangadex(title), 
-        asuratoons(title),
-        mangapill(title),
-        mangapark(title),
-        flamecomics(title),
-        mangareader(title),
-        mangafreak(title),
-    )
-    for result in results:
-        print(result['site'])
-        for index, manga in enumerate(result['results']):
-            print(f"{index+1}.\t{manga['title']}")
+# [
+#     {
+#         "site": str,
+#         "site_url": str
+#         "results": [
+#             "title": str,
+#             "url": str,
+#             "image":str
+#         ]
+#     }
+# ]
+
+# async def search(title):
+#     results = await asyncio.gather(
+#         mangadex(title), 
+#         asuratoons(title),
+#         mangapill(title),
+#         mangapark(title),
+#         flamecomics(title),
+#         mangareader(title),
+#         mangafreak(title),
+#     )
+#     for result in results:
+#         print(result['site'])
+#         for index, manga in enumerate(result['results']):
+#             print(f"{index+1}.\t{manga['title']}")
+
+def search():
+    title = title_variable.get()
+    asyncio.run(search_site(mangadex, title))
+    asyncio.run(search_site(asuratoons, title))
+    asyncio.run(search_site(mangapill, title))
+    asyncio.run(search_site(mangapark, title))
+    asyncio.run(search_site(flamecomics, title))
+    asyncio.run(search_site(mangareader, title))
+    asyncio.run(search_site(mangafreak, title))
+
+def open_url(url):
+    webbrowser.open(url, new=2)
+
+async def search_site(func, title):
+    global content_frame, canvas
+    results = await func(title)
+    site_frame = Frame(content_frame, padx=5, pady=5)
+    site_frame.pack(fill=X, side=TOP)
+    site_frame.grid_rowconfigure(1, weight=1, uniform='site_frame_row')
+    
+    site_label = Label(site_frame, padx=5, pady=0, text=results['site'])
+    site_label.grid(column=0, row=0, sticky='W')
+
+    site_result = Frame(site_frame)
+    site_result.grid(column=0, row=1, sticky='WE')
+
+    for result in results['results']:
+        u = urlopen(result['image'])
+        raw_image = u.read()
+        u.close()
+
+        manga = Frame(site_result)
+        manga.pack(fill=X, side=TOP)
+        manga.grid_columnconfigure(1, weight=1, uniform='manga_col')
+
+        # manga_image = Label(manga, image=raw_image, padx=5, pady=5)
+        manga_image = Label(manga, text="Empty", padx=5, pady=5)
+        manga_image.grid(column=0, row=0, sticky='WE')
+
+        manga_title = Label(manga, text=result['title'])
+        manga_title.grid(column=1, row=0, sticky='W')
+
+    root.geometry('800x600')
+
+def main():
+    global content_frame, canvas
+    root.geometry('799x599')
+    root.grid_columnconfigure(0, weight=1, uniform='root_col')
+    root.grid_rowconfigure(0, weight=1, uniform='root_row')
+
+    app_frame = Frame(root, height=600, width=800, borderwidth=2, relief='groove')
+    app_frame.grid(sticky='WENS')
+    app_frame.grid_columnconfigure(1, weight=1, uniform='app_frame_col')
+    app_frame.grid_rowconfigure(0, weight=1, uniform='app_frame_row')
+    
+    # Side Frame
+    side_frame = Frame(app_frame, padx=20, pady=20, borderwidth=2, relief='groove')
+    side_frame.grid(column=0, row=0, sticky='NS')
+
+    search_label = Label(side_frame, text="Search")
+    search_label.grid(column=0, row=0,sticky="WN")
+
+    search_entry = Entry(side_frame, textvariable=title_variable)
+    search_entry.grid(column=0, row=1, sticky="WEN")
+
+    search_button = Button(side_frame, text="Search", command=search)
+    search_button.grid(column=0, row=2, sticky='EN')
+
+    # Main Frame
+    main_frame = Frame(app_frame, relief='groove')
+    main_frame.grid(column=1, row=0, sticky="WENS")
+    main_frame.grid_columnconfigure(0, weight=1, uniform="main_frame_col")
+    main_frame.grid_rowconfigure(1, weight=1, uniform='main_frame_row')
+
+    # Top Frame
+    top_frame = Frame(main_frame, padx=20, pady=5, borderwidth=2, relief='groove')
+    top_frame.grid(column=0, row=0, columnspan=2, sticky='WEN')
+    top_frame.grid_columnconfigure(0, weight=1, uniform='top_frame_col')
+
+    results_label = Label(top_frame, text="Results:")
+    results_label.grid(column=0, row=0, sticky='W')
+
+    about_button = Button(top_frame, text="MA", width=5, command=search)
+    about_button.grid(column=1, row=0, sticky='E')
+
+    # Content Frame
+    canvas = Canvas(main_frame)
+    canvas.grid(column=0, row=1, sticky='WENS')
+    scrollbar = Scrollbar(main_frame, orient=VERTICAL, command=canvas.yview)
+    scrollbar.grid(column=1, row=1, sticky='NS')
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    content_frame = Frame(canvas, padx=10, pady=10)
+    content_frame.grid(column=0, row=1, sticky='WENS')
+    canvas.create_window((0,0), window=content_frame, anchor='nw')
+
+    root.mainloop()
 
 if __name__ == "__main__":
-    title = input("Search for: ")
-    asyncio.run(search(title.replace(" ", "+")))
+    root = Tk()
+    title_variable = StringVar()
+    main()
+    # title = input("Search for: ")
+    # asyncio.run(search(title.replace(" ", "+")))
