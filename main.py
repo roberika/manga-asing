@@ -178,6 +178,12 @@ def title_url(title):
 def parse_manga(title, url, image):
     return {"title": title, "url": url, "image": image}
 
+def flip_selection():
+    target = (mdex.get() + 1) % 2
+    vals = [mdex, asurat, mpill, mpark, flamec, mreader, mfire, mfreak]
+    for val in vals:
+        val.set(target)
+
 # [
 #     {
 #         "site": str,
@@ -209,12 +215,17 @@ def parse_manga(title, url, image):
 async def aggregate(title):
     global canvas
     async with aiohttp.ClientSession() as session:
-        funcs = [
-            mangadex, asuratoons, mangapill, mangapark,
-            flamecomics, mangareader, mangafire, mangafreak
-        ]
+        funcs = []
+        if mdex.get() == 0    :funcs.append(mangadex)
+        if asurat.get() == 0  :funcs.append(asuratoons)
+        if mpill.get() == 0   :funcs.append(mangapill)
+        if mpark.get() == 0   :funcs.append(mangapark)
+        if flamec.get() == 0  :funcs.append(flamecomics)
+        if mreader.get() == 0 :funcs.append(mangareader)
+        if mfire.get() == 0   :funcs.append(mangafire)
+        if mfreak.get() == 0  :funcs.append(mangafreak)
         tasks = [
-            asyncio.create_task(coro=search_site(f, title, session)) for f in funcs
+            asyncio.create_task(coro=search_site(func, title, session)) for func in funcs
         ]
         await asyncio.gather(*tasks, return_exceptions=False)
 
@@ -241,25 +252,28 @@ async def search_site(func, title, session):
     for result in results['results']:
         manga = tk.Frame(site_result)
         manga.pack(fill=tk.X, side=tk.TOP)
-        manga.grid_columnconfigure(1, weight=1, uniform='manga_col')
+        manga.grid_columnconfigure(1, weight=1, uniform='manga_column')
 
         manga_image = tkhtml.HTMLLabel(manga, html=f"<img src={result['image']} height='80' width='60'>", width=10, height=5)
         manga_image.grid(column=0, row=0, sticky='WENS')
 
-        manga_title = tk.Label(manga, text=result['title'], anchor='nw', font=("Segoe UI", 11, "normal"))
-        manga_title.grid(column=1, row=0, sticky='WE')
+        manga_title = tk.Message(manga, text=result['title'], anchor='nw', font=("Segoe UI", 11, "normal"), width=500)
+        manga_title.grid(column=1, row=0, sticky='WEN', pady=5)
 
         manga.bind("<Button-1>", lambda e, url=result['url']: webbrowser.open_new_tab(url))
         manga_image.bind("<Button-1>", lambda e, url=result['image']: webbrowser.open_new_tab(url))
         manga_title.bind("<Button-1>", lambda e, url=result['url']: webbrowser.open_new_tab(url))
 
+    content_frame.config(width=600)
+    root.geometry('800x600')
+
 def main():
     global content_frame, canvas
-    root.geometry('800x600')
+    root.geometry('600x600')
     root.grid_columnconfigure(0, weight=1, uniform='root_col')
     root.grid_rowconfigure(0, weight=1, uniform='root_row')
 
-    app_frame = tk.Frame(root, height=600, width=800, borderwidth=2, relief='groove')
+    app_frame = tk.Frame(root, borderwidth=2, relief='groove')
     app_frame.grid(sticky='WENS')
     app_frame.grid_columnconfigure(1, weight=1, uniform='app_frame_col')
     app_frame.grid_rowconfigure(0, pad=2, weight=1, uniform='app_frame_row')
@@ -268,14 +282,29 @@ def main():
     side_frame = tk.Frame(app_frame, padx=5, pady=5, borderwidth=2, relief='groove')
     side_frame.grid(column=0, row=0, sticky='NS')
 
+    ## Search
     search_label = tk.Label(side_frame, padx=5, pady=10, text="Search", font=("Segoe UI", 12))
-    search_label.grid(column=0, row=0,sticky="WN")
+    search_label.pack(fill=tk.NONE, anchor='nw')
 
     search_entry = tk.Entry(side_frame, textvariable=title_variable)
-    search_entry.grid(column=0, row=1, sticky="WEN")
+    search_entry.pack(fill=tk.X, side=tk.TOP, pady=5)
 
     search_button = tk.Button(side_frame, padx=5, text="Search", command=search)
-    search_button.grid(column=0, row=2, sticky='EN', pady=5)
+    search_button.pack(fill=tk.NONE, anchor='ne', pady=10)
+
+    ## Manga Site selector
+    manga_label = tk.Label(side_frame, padx=5, pady=10, text="Manga Sites", font=("Segoe UI", 12))
+    manga_label.pack(fill=tk.NONE, anchor='nw')
+
+    names = ["Mangadex", "Asuratoons", "Mangapill", "Mangapark", 
+             "Flamecomics", "Mangareader", "Mangafire", "Mangafreak"]
+    vals = [mdex, asurat, mpill, mpark, flamec, mreader, mfire, mfreak]
+    for name, val in zip(names, vals):
+        site_check_box = tk.Checkbutton(side_frame, text=name, variable=val, onvalue=0, offvalue=1)
+        site_check_box.pack(fill=tk.NONE, anchor='nw')
+
+    flip_button = tk.Button(side_frame, padx=5, text="Check All", command=flip_selection)
+    flip_button.pack(fill=tk.NONE, anchor='ne', pady=10)
 
     # Main Frame
     main_frame = tk.Frame(app_frame, relief='groove')
@@ -284,18 +313,18 @@ def main():
     main_frame.grid_rowconfigure(1, weight=1, uniform='main_frame_row')
 
     # Top Frame
-    top_frame = tk.Frame(main_frame, padx=20, pady=10, borderwidth=2, relief='groove')
+    top_frame = tk.Frame(main_frame, borderwidth=2, relief='groove')
     top_frame.grid(column=0, row=0, columnspan=2, sticky='WEN')
     top_frame.grid_columnconfigure(0, weight=1, uniform='top_frame_col')
 
     results_label = tk.Label(top_frame, text="Results:", font=("Segoe UI", 12))
-    results_label.grid(column=0, row=0, sticky='W')
+    results_label.grid(column=0, row=0, sticky='W', pady=10, padx=10)
 
-    about_button = tk.Button(top_frame, text="MA", width=5, command=search)
+    about_button = tkhtml.HTMLLabel(top_frame, html=f"<a href='https://github.com/roberika/manga-asing'><img src='https://raw.githubusercontent.com/roberika/dataset/main/logo-mangaasingicon.ico' height='30' width='30'></a>", width=4, height=2)
     about_button.grid(column=1, row=0, sticky='E')
 
     # Content Frame
-    canvas = tk.Canvas(main_frame, borderwidth=2, relief='groove')
+    canvas = tk.Canvas(main_frame)
     canvas.grid(column=0, row=1, sticky='WENS')
     scrollbar = tk.Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
     scrollbar.grid(column=1, row=1, sticky='NS')
@@ -309,8 +338,16 @@ def main():
 limit = 5
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    root = tk.Tk(className="manga asing")
     title_variable = tk.StringVar()
+    mdex = tk.IntVar()
+    asurat = tk.IntVar()
+    mpill = tk.IntVar()
+    mpark = tk.IntVar()
+    flamec = tk.IntVar()
+    mreader = tk.IntVar()
+    mfire = tk.IntVar()
+    mfreak = tk.IntVar()
     main()
     # title = input("Search for: ")
     # asyncio.run(search(title.replace(" ", "+")))
