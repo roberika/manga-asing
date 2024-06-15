@@ -1,176 +1,203 @@
+import threading
 from bs4 import BeautifulSoup
 import aiohttp
 import asyncio
 import re
-import json
 import webbrowser
 import time
 import urllib
 import tkinter as tk
 import tkhtmlview as tkhtml
 
-# header, bagian search, bagian manga, batasan segment, title filter, filter out, image inside, filter title
-# 0 = spesial, 1 = request, 2 = playwright
-
-# buka gambar manga pill perlu referer https://mangapill.com/
-
 async def mangadex(title, session):
 # def mangadex(title):
     # Dari docs API https://api.mangadex.org/docs/swagger.html#/Manga/get-search-manga
     # Docs API sikok lagi buruk nian, yang ini biso simulate url
     site = "https://mangadex.org"
-    print("Fetching", site)
-    async with session.get(f"https://api.mangadex.org/manga?title={title_url(title)}&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&order%5Brelevance%5D=desc&hasAvailableChapters=true&includes%5B%5D=cover_art") as response:
-        results = []
-        r = await response.json()
-        for manga in r["data"]:
-            title = list(manga['attributes']['title'].values())[0]
-            id = manga['id']
-            image = [r['attributes']['fileName'] for r in manga['relationships'] if r['type'] == 'cover_art'][0]
-            image_url = f"https://uploads.mangadex.org/covers/{id}/{image}.512.jpg"
-            results.append(parse_manga(title, f"{site}/title/{id}", image_url))
-    print(site, "done")
-    return {"site": "MangaDex", "site_url": site, "results": results[0:limit]}
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"https://api.mangadex.org/manga?title={title_url(title)}&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&order%5Brelevance%5D=desc&hasAvailableChapters=true&includes%5B%5D=cover_art") as response:
+            results = []
+            r = await response.json()
+            for manga in r["data"]:
+                title = list(manga['attributes']['title'].values())[0]
+                id = manga['id']
+                image = [r['attributes']['fileName'] for r in manga['relationships'] if r['type'] == 'cover_art'][0]
+                image_url = f"https://uploads.mangadex.org/covers/{id}/{image}.512.jpg"
+                results.append(parse_manga(title, f"{site}/title/{id}", image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "MangaDex", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 async def asuratoons(title, session):
     site = "https://asuratoon.com"
-    print("Fetching", site)
-    async with session.get(f"{site}/?s={title_url(title)}") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = soup.find_all("div", attrs={"class": re.compile("bsx")})
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/?s={title_url(title)}") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = soup.find_all("div", attrs={"class": re.compile("bsx")})
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.find("a", attrs={"href": re.compile(f"^{site}/manga/"), "title": re.compile(r"\w")})
-        img = a_href.img
+        results = []
+        for manga in manga_list:
+            a_href = manga.find("a", attrs={"href": re.compile(f"^{site}/manga/"), "title": re.compile(r"\w")})
+            img = a_href.img
 
-        manga_title = a_href['title']
-        url = a_href['href']
-        image_url = img["src"]
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "AsuraToons", "site_url": site, "results": results[0:limit]}
+            manga_title = a_href['title']
+            url = a_href['href']
+            image_url = img["src"]
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "AsuraToons", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 async def flamecomics(title, session):
     site = "https://flamecomics.me"
-    print("Fetching", site)
-    async with session.get(f"{site}/?s={title_url(title)}") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = soup.find_all("div", attrs={"class": re.compile("bsx")})
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/?s={title_url(title)}") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = soup.find_all("div", attrs={"class": re.compile("bsx")})
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.find("a", attrs={"href": re.compile(f"^{site}/series/"), "title": re.compile(r"\w")})
-        img = a_href.img
+        results = []
+        for manga in manga_list:
+            a_href = manga.find("a", attrs={"href": re.compile(f"^{site}/series/"), "title": re.compile(r"\w")})
+            img = a_href.img
 
-        manga_title = a_href['title']
-        url = a_href['href']
-        image_url = img["src"]
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "FlameComics", "site_url": site, "results": results[0:limit]}
+            manga_title = a_href['title']
+            url = a_href['href']
+            image_url = img["src"]
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "FlameComics", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 async def mangapill(title, session):
     site = "https://mangapill.com"
-    print("Fetching", site)
-    async with session.get(f"{site}/search?q={title_url(title)}&type=&status=") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = [a.parent for a in soup.find_all("a", attrs={"href": re.compile("^/manga/")}) if len(a.parent.attrs) == 0]
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/search?q={title_url(title)}&type=&status=") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = [a.parent for a in soup.find_all("a", attrs={"href": re.compile("^/manga/")}) if len(a.parent.attrs) == 0]
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.find("a", attrs={"class": re.compile("mb-2")})
-        img = manga.img
-        div = a_href.find()
+        results = []
+        for manga in manga_list:
+            a_href = manga.find("a", attrs={"class": re.compile("mb-2")})
+            img = manga.img
+            div = a_href.find()
 
-        manga_title = div.string
-        url = a_href['href']
-        image_url = img['data-src']
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "MangaPill", "site_url": site, "results": results[0:limit]}
+            manga_title = div.string
+            url = a_href['href']
+            image_url = img['data-src']
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "MangaPill", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 async def mangapark(title, session):
     site = "https://mangapark.net"
-    print("Fetching", site)
-    async with session.get(f"{site}/search?word={title_url(title)}") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = soup.find_all("img", attrs={"title": re.compile(r"\w")})
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/search?word={title_url(title)}") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = soup.find_all("img", attrs={"title": re.compile(r"\w")})
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.parent
+        results = []
+        for manga in manga_list:
+            a_href = manga.parent
 
-        manga_title = manga['title']
-        url = a_href['href']
-        image_url = manga['src']
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "MangaPark", "site_url": site, "results": results[0:limit]}
+            manga_title = manga['title']
+            url = a_href['href']
+            image_url = manga['src']
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "MangaPark", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 async def mangareader(title, session):
     site = "https://mangareader.to"
-    print("Fetching", site)
-    async with session.get(f"{site}/search?keyword={title_url(title)}") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = soup.find_all("div", attrs={"class": re.compile("item item-spc")})
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/search?keyword={title_url(title)}") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = soup.find_all("div", attrs={"class": re.compile("item item-spc")})
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.find('a', attrs={"title": re.compile(r"\w")})
-        img = manga.img
+        results = []
+        for manga in manga_list:
+            a_href = manga.find('a', attrs={"title": re.compile(r"\w")})
+            img = manga.img
 
-        manga_title = a_href.string
-        url = a_href['href']
-        image_url = img['src']
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "MangaReader", "site_url": site, "results": results[0:limit]}
+            manga_title = a_href.string
+            url = a_href['href']
+            image_url = img['src']
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "MangaReader", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 async def mangafire(title, session):
     site = "https://mangafire.to"
-    print("Fetching", site)
-    async with session.get(f"{site}/filter?keyword={title_url(title)}") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = soup.find_all("div", attrs={"class": re.compile("unit item")})
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/filter?keyword={title_url(title)}") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = soup.find_all("div", attrs={"class": re.compile("unit item")})
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.find('div', attrs={"class": re.compile("info")}).find('a', attrs={"href": re.compile("/manga/")})
-        img = manga.img
+        results = []
+        for manga in manga_list:
+            a_href = manga.find('div', attrs={"class": re.compile("info")}).find('a', attrs={"href": re.compile("/manga/")})
+            img = manga.img
 
-        manga_title = a_href.string
-        url = a_href['href']
-        image_url = img['src']
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "MangaFire", "site_url": site, "results": results[0:limit]}
+            manga_title = a_href.string
+            url = a_href['href']
+            image_url = img['src']
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "MangaFire", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
     
 async def mangafreak(title, session):
     site = "https://ww1.mangafreak.me"
-    print("Fetching", site)
-    async with session.get(f"{site}/Find/{title_url(title)}") as response:
-        raw_response = await response.text()
-    soup = BeautifulSoup(raw_response, 'html.parser')
-    manga_list = soup.find_all("div", attrs={"class": re.compile("manga_search_item")})
+    print("Fetching", site, "\t", time.perf_counter() - time_start)
+    try:
+        async with session.get(f"{site}/Find/{title_url(title)}") as response:
+            raw_response = await response.text()
+        soup = BeautifulSoup(raw_response, 'html.parser')
+        manga_list = soup.find_all("div", attrs={"class": re.compile("manga_search_item")})
 
-    results = []
-    for manga in manga_list:
-        a_href = manga.h3.find('a', attrs={"href": re.compile("/Manga/")})
-        img = manga.img
+        results = []
+        for manga in manga_list:
+            a_href = manga.h3.find('a', attrs={"href": re.compile("/Manga/")})
+            img = manga.img
 
-        manga_title = a_href.string
-        url = a_href['href']
-        image_url = img['src']
-        results.append(parse_manga(manga_title, url, image_url))
-    print(site, "done")
-    return {"site": "MangaFreak", "site_url": site, "results": results[0:limit]}
+            manga_title = a_href.string
+            url = a_href['href']
+            image_url = img['src']
+            results.append(parse_manga(manga_title, url, image_url))
+        print(site, "done", "\t", time.perf_counter() - time_start)
+        return {"site": "MangaFreak", "site_url": site, "results": results[0:limit]}
+    except asyncio.exceptions.TimeoutError as e:
+        print(site, "timed out", "\t", time.perf_counter() - time_start)
+        return None
 
 def title_url(title):
     return urllib.parse.quote_plus(title)
@@ -184,37 +211,9 @@ def flip_selection():
     for val in vals:
         val.set(target)
 
-# [
-#     {
-#         "site": str,
-#         "site_url": str
-#         "results": [
-#             "title": str,
-#             "url": str,
-#             "image":str
-#         ]
-#     }
-# ]
-
-# async def search(title):
-#     results = await asyncio.gather(
-#         mangadex(title), 
-#         asuratoons(title),
-#         mangapill(title),
-#         mangapark(title),
-#         flamecomics(title),
-#         mangareader(title),
-#         mangafire(title),
-#         mangafreak(title),
-#     )
-#     for result in results:
-#         print(result['site'])
-#         for index, manga in enumerate(result['results']):
-#             print(f"{index+1}.\t{manga['title']}")
-
 async def aggregate(title):
-    global canvas
-    async with aiohttp.ClientSession() as session:
+    session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
+    async with aiohttp.ClientSession(timeout=session_timeout) as session:
         funcs = []
         if mdex.get() == 0    :funcs.append(mangadex)
         if asurat.get() == 0  :funcs.append(asuratoons)
@@ -225,20 +224,24 @@ async def aggregate(title):
         if mfire.get() == 0   :funcs.append(mangafire)
         if mfreak.get() == 0  :funcs.append(mangafreak)
         tasks = [
-            asyncio.create_task(coro=search_site(func, title, session)) for func in funcs
+            asyncio.create_task(coro=display(func, title, session)) for func in funcs
         ]
         await asyncio.gather(*tasks, return_exceptions=False)
 
 def search():
-    global content_frame
+    global time_start
+    time_start = time.perf_counter()
     for child in content_frame.winfo_children(): child.destroy()
     title = title_variable.get()
     asyncio.run(aggregate(title))
+    content_frame.config(width=600)
+    root.geometry('800x600')
     
-async def search_site(func, title, session):
-    global content_frame, canvas
-
+async def display(func, title, session):
     results = await func(title, session)
+    if results == None : return
+
+    print("Appending", results['site'], "\t", time.perf_counter() - time_start)
     site_frame = tk.Frame(content_frame, padx=5)
     site_frame.pack(fill=tk.X, side=tk.TOP)
     site_frame.grid_rowconfigure(1, weight=1, uniform='site_frame_row')
@@ -263,9 +266,7 @@ async def search_site(func, title, session):
         manga.bind("<Button-1>", lambda e, url=result['url']: webbrowser.open_new_tab(url))
         manga_image.bind("<Button-1>", lambda e, url=result['image']: webbrowser.open_new_tab(url))
         manga_title.bind("<Button-1>", lambda e, url=result['url']: webbrowser.open_new_tab(url))
-
-    content_frame.config(width=600)
-    root.geometry('800x600')
+    print(results['site'], "displayed", "\t", time.perf_counter() - time_start)
 
 def main():
     global content_frame, canvas
@@ -289,7 +290,8 @@ def main():
     search_entry = tk.Entry(side_frame, textvariable=title_variable)
     search_entry.pack(fill=tk.X, side=tk.TOP, pady=5)
 
-    search_button = tk.Button(side_frame, padx=5, text="Search", command=search)
+    search_button = tk.Button(side_frame, padx=5, text="Search", 
+        command=lambda: threading.Thread(target=search).start())
     search_button.pack(fill=tk.NONE, anchor='ne', pady=10)
 
     ## Manga Site selector
@@ -335,9 +337,33 @@ def main():
 
     root.mainloop()
 
-limit = 5
+async def baseline():
+    print("Running scraping sequentially")
+    session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
+    async with aiohttp.ClientSession(timeout=session_timeout) as session:
+        funcs = [mangadex, asuratoons, mangapill, mangapark, flamecomics, mangareader, mangafire, mangafreak]
+        for func in funcs:
+            await func("isekai", session)
+
+async def asyncline():
+    print("Running scraping asynchronously")
+    session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
+    async with aiohttp.ClientSession(timeout=session_timeout) as session:
+        funcs = [mangadex, asuratoons, mangapill, mangapark, flamecomics, mangareader, mangafire, mangafreak]
+        tasks = [asyncio.create_task(coro=func("isekai", session)) for func in funcs]
+        await asyncio.gather(*tasks, return_exceptions=False)
 
 if __name__ == "__main__":
+    limit = 5
+    timeout = 5
+    time_start = None
+
+    # time_start = time.perf_counter()
+    # asyncio.run(baseline())
+    # print()
+    # time_start = time.perf_counter()
+    # asyncio.run(asyncline())
+
     root = tk.Tk(className="manga asing")
     title_variable = tk.StringVar()
     mdex = tk.IntVar()
@@ -349,5 +375,17 @@ if __name__ == "__main__":
     mfire = tk.IntVar()
     mfreak = tk.IntVar()
     main()
-    # title = input("Search for: ")
-    # asyncio.run(search(title.replace(" ", "+")))
+
+# async def aggregate(title):
+#     session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
+#     async with aiohttp.ClientSession(timeout=session_timeout) as session:
+#         # code
+#         return
+
+# async def manga(title, session):
+#     try:
+#         async with session.get(f"site/search?word={title_url(title)}") as response:
+#             # code
+#             return {} #results
+#     except asyncio.exceptions.TimeoutError as e:
+#         return None
