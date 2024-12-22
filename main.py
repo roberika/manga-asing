@@ -1,11 +1,18 @@
-import threading
-from bs4 import BeautifulSoup
+## Web Access
 import aiohttp
-import asyncio
-import re
 import webbrowser
+
+## Paralellism
+import threading
+import asyncio
+
+## Utils
+from bs4 import BeautifulSoup
+import re
 import time
 import urllib
+
+## UI
 import tkinter as tk
 import tkhtmlview as tkhtml
 
@@ -338,6 +345,8 @@ def main():
     root.mainloop()
 
 async def baseline():
+    global time_start
+    time_start = time.perf_counter()
     print("Running scraping sequentially")
     session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
     async with aiohttp.ClientSession(timeout=session_timeout) as session:
@@ -346,6 +355,8 @@ async def baseline():
             await func("isekai", session)
 
 async def asyncline():
+    global time_start
+    time_start = time.perf_counter()
     print("Running scraping asynchronously")
     session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
     async with aiohttp.ClientSession(timeout=session_timeout) as session:
@@ -353,17 +364,11 @@ async def asyncline():
         tasks = [asyncio.create_task(coro=func("isekai", session)) for func in funcs]
         await asyncio.gather(*tasks, return_exceptions=False)
 
+limit = 5
+timeout = 5
+time_start = None
+
 if __name__ == "__main__":
-    limit = 5
-    timeout = 5
-    time_start = None
-
-    # time_start = time.perf_counter()
-    # asyncio.run(baseline())
-    # print()
-    # time_start = time.perf_counter()
-    # asyncio.run(asyncline())
-
     root = tk.Tk(className="manga asing")
     title_variable = tk.StringVar()
     mdex = tk.IntVar()
@@ -375,17 +380,3 @@ if __name__ == "__main__":
     mfire = tk.IntVar()
     mfreak = tk.IntVar()
     main()
-
-# async def aggregate(title):
-#     session_timeout = aiohttp.ClientTimeout(total=None,sock_connect=timeout,sock_read=timeout)
-#     async with aiohttp.ClientSession(timeout=session_timeout) as session:
-#         # code
-#         return
-
-# async def manga(title, session):
-#     try:
-#         async with session.get(f"site/search?word={title_url(title)}") as response:
-#             # code
-#             return {} #results
-#     except asyncio.exceptions.TimeoutError as e:
-#         return None
